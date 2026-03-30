@@ -106,7 +106,10 @@ def main():
             context = browser.contexts[0]
             page = context.pages[0] if context.pages else context.new_page()
 
-            page.wait_for_load_state("networkidle", timeout=60000)
+            try:
+                page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                page.wait_for_load_state("load", timeout=30000)
             page.wait_for_timeout(3000)
 
             # Wait for Cloudflare challenge to resolve
@@ -123,7 +126,10 @@ def main():
                 print(json.dumps({"error": "Cloudflare challenge not resolved after 100s"}), file=sys.stderr)
                 sys.exit(1)
 
-            page.wait_for_load_state("networkidle", timeout=30000)
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
             page.wait_for_timeout(2000)
 
             # Login if needed
@@ -140,8 +146,11 @@ def main():
                 page.fill("#ctl00_ContentSectionMisc_txtPassword", password)
                 page.wait_for_timeout(500)
                 page.click("a.btn-login")
-                page.wait_for_load_state("networkidle", timeout=30000)
-                page.wait_for_timeout(3000)
+                try:
+                    page.wait_for_load_state("load", timeout=30000)
+                except Exception:
+                    pass
+                page.wait_for_timeout(5000)
 
                 if "login" in page.url.lower():
                     print(json.dumps({"error": "Login failed — still on login page"}), file=sys.stderr)
@@ -149,14 +158,20 @@ def main():
 
                 print("DEBUG: Login successful", file=sys.stderr)
 
+            # Use the actual base URL from the browser (may differ from configured due to redirects)
+            from urllib.parse import urlparse
+            parsed = urlparse(page.url)
+            actual_base = f"{parsed.scheme}://{parsed.netloc}"
+            print(f"DEBUG: Post-login URL: {page.url}, using base: {actual_base}", file=sys.stderr)
+
             # ─── Scrape Dashboard ───────────────────────────────────
-            result["players"] = scrape_dashboard(page, site_url)
+            result["players"] = scrape_dashboard(page, actual_base)
 
             # ─── Scrape Weekly Balance ──────────────────────────────
-            enrich_with_balance(page, site_url, result["players"])
+            enrich_with_balance(page, actual_base, result["players"])
 
             # ─── Scrape Wagers ──────────────────────────────────────
-            result["wagers"] = scrape_wagers(page, site_url)
+            result["wagers"] = scrape_wagers(page, actual_base)
 
             browser.close()
 
@@ -173,13 +188,53 @@ def scrape_dashboard(page, site_url: str) -> list:
     """Scrape the Dashboard page for player win/loss data with agent (sub-agent) info."""
     players = []
     try:
-        dashboard_url = site_url.rstrip("/") + "/Forms/Dashboard.aspx"
-        page.goto(dashboard_url, wait_until="networkidle", timeout=30000)
-        page.wait_for_timeout(3000)
+        # Check if we're already on a dashboard/content page
+        current = page.url.lower()
+        if "login" in current or "dashboard" not in current:
+            # Try navigating to dashboard
+            dashboard_url = site_url.rstrip("/") + "/Forms/Dashboard.aspx"
+            print(f"DEBUG: Navigating to {dashboard_url}", file=sys.stderr)
+            page.goto(dashboard_url, wait_until="load", timeout=30000)
+            page.wait_for_timeout(5000)
 
-        # Find tables — typically "Top Losers" and "Top Winners"
-        tables = page.locator("table.table, table[class*='grid'], table[id*='grid']").all()
-        print(f"DEBUG: Found {len(tables)} tables on dashboard", file=sys.stderr)
+            # If redirected back to login, try clicking Dashboard link in nav menu
+            if "login" in page.url.lower():
+                print("DEBUG: Redirected to login, trying nav menu", file=sys.stderr)
+                page.go_back()
+                page.wait_for_timeout(2000)
+                try:
+                    page.click("text=Dashboard", timeout=5000)
+                    page.wait_for_timeout(3000)
+                except Exception:
+                    # Try other nav links
+                    try:
+                        page.click("a[href*='Dashboard']", timeout=5000)
+                        page.wait_for_timeout(3000)
+                    except Exception:
+                        pass
+        else:
+            page.wait_for_timeout(3000)
+
+        print(f"DEBUG: Now on: {page.url}", file=sys.stderr)
+
+        # Debug: dump page info
+        print(f"DEBUG: Dashboard URL: {page.url}", file=sys.stderr)
+        print(f"DEBUG: Dashboard title: {page.title()}", file=sys.stderr)
+
+        # Try to find ALL tables on the page
+        all_tables = page.locator("table").all()
+        print(f"DEBUG: Total <table> elements on page: {len(all_tables)}", file=sys.stderr)
+        for i, t in enumerate(all_tables[:10]):
+            cls = t.get_attribute("class") or ""
+            tid = t.get_attribute("id") or ""
+            rows = t.locator("tr").count()
+            print(f"DEBUG: Table {i}: class='{cls}' id='{tid}' rows={rows}", file=sys.stderr)
+
+        # Find tables with broader selectors
+        tables = page.locator("table").all()
+        # Filter to tables with at least 2 rows (header + data)
+        tables = [t for t in tables if t.locator("tr").count() >= 2]
+        print(f"DEBUG: Tables with 2+ rows: {len(tables)}", file=sys.stderr)
 
         seen_ids = set()
         for table in tables:
@@ -233,10 +288,20 @@ def enrich_with_balance(page, site_url: str, players: list):
     """Navigate to Weekly Balance page and enrich player records with balance/action."""
     try:
         balance_url = site_url.rstrip("/") + "/Forms/BettorBalance.aspx"
-        page.goto(balance_url, wait_until="networkidle", timeout=30000)
-        page.wait_for_timeout(3000)
+        print(f"DEBUG: Navigating to balance page: {balance_url}", file=sys.stderr)
+        page.goto(balance_url, wait_until="load", timeout=30000)
+        page.wait_for_timeout(5000)
+        print(f"DEBUG: Balance page URL: {page.url}, title: {page.title()}", file=sys.stderr)
 
-        tables = page.locator("table.table, table[class*='grid'], table[id*='grid']").all()
+        # Use broad table selector
+        all_tables = page.locator("table").all()
+        tables = [t for t in all_tables if t.locator("tr").count() >= 2]
+        print(f"DEBUG: Balance page tables: {len(all_tables)} total, {len(tables)} with 2+ rows", file=sys.stderr)
+
+        # Debug first table headers
+        for i, t in enumerate(tables[:5]):
+            hdrs = [c.inner_text().strip().lower() for c in t.locator("tr").first.locator("th, td").all()]
+            print(f"DEBUG: Balance table {i} headers: {hdrs}", file=sys.stderr)
 
         player_map = {p["account_id"]: p for p in players}
 
@@ -248,40 +313,62 @@ def enrich_with_balance(page, site_url: str, players: list):
             header_cells = rows[0].locator("th, td").all()
             headers = [h.inner_text().strip().lower() for h in header_cells]
 
+            # The balance table may use "agent" as first column containing player IDs
             player_col = next((i for i, h in enumerate(headers) if "player" in h or "account" in h or "bettor" in h), None)
-            balance_col = next((i for i, h in enumerate(headers) if "balance" in h), None)
-            action_col = next((i for i, h in enumerate(headers) if "action" in h or "handle" in h or "volume" in h), None)
-            wl_col = next((i for i, h in enumerate(headers) if "win" in h or "loss" in h or "w/l" in h or "net" in h), None)
             agent_col = next((i for i, h in enumerate(headers) if "agent" in h), None)
+            # If no explicit player column, the "agent" column likely holds the player/account name
+            if player_col is None and agent_col is not None:
+                player_col = agent_col
+                agent_col = None
+
+            balance_col = next((i for i, h in enumerate(headers) if "new bal" in h or "balance" in h), None)
+            prev_bal_col = next((i for i, h in enumerate(headers) if "prev bal" in h or "prev" in h), None)
+            action_col = next((i for i, h in enumerate(headers) if "action" in h or "handle" in h or "volume" in h or "at risk" in h), None)
+            wl_col = next((i for i, h in enumerate(headers) if h == "this week" or "win" in h or "loss" in h or "w/l" in h), None)
+            settle_col = next((i for i, h in enumerate(headers) if "settle" in h), None)
 
             if player_col is None:
                 continue
 
+            print(f"DEBUG: Balance columns: player={player_col} balance={balance_col} wl={wl_col} action={action_col} settle={settle_col}", file=sys.stderr)
+
             for row in rows[1:]:
                 cells = row.locator("td").all()
-                if len(cells) <= (player_col or 0):
+                if len(cells) < 3:
                     continue
 
-                pid = cells[player_col].inner_text().strip()
-                balance = parse_number(cells[balance_col].inner_text()) if balance_col is not None and len(cells) > balance_col else 0
-                action = parse_number(cells[action_col].inner_text()) if action_col is not None and len(cells) > action_col else 0
-                wl = parse_number(cells[wl_col].inner_text()) if wl_col is not None and len(cells) > wl_col else None
-                agent_name = cells[agent_col].inner_text().strip() if agent_col is not None and len(cells) > agent_col else ""
+                raw_pid = cells[player_col].inner_text().strip() if player_col < len(cells) else ""
+                if not raw_pid or "total" in raw_pid.lower() or "grand" in raw_pid.lower():
+                    continue
+
+                # Balance page shows "ACCOUNT_ID / DISPLAY_NAME" — extract the account ID
+                pid = raw_pid.split("/")[0].strip() if "/" in raw_pid else raw_pid
+                display_name = raw_pid.split("/")[1].strip() if "/" in raw_pid else ""
+
+                balance = parse_number(cells[balance_col].inner_text()) if balance_col is not None and balance_col < len(cells) else 0
+                action = parse_number(cells[action_col].inner_text()) if action_col is not None and action_col < len(cells) else 0
+                wl = parse_number(cells[wl_col].inner_text()) if wl_col is not None and wl_col < len(cells) else None
+                settle = parse_number(cells[settle_col].inner_text()) if settle_col is not None and settle_col < len(cells) else 0
+
+                print(f"DEBUG: Balance row: pid={pid} name={display_name} balance={balance} wl={wl} action={action}", file=sys.stderr)
 
                 if pid in player_map:
                     player_map[pid]["balance"] = balance
                     player_map[pid]["action"] = action
+                    if display_name and not player_map[pid].get("name"):
+                        player_map[pid]["name"] = display_name
                     if wl is not None:
                         player_map[pid]["win_loss"] = wl
                 else:
                     # New player found on balance page but not dashboard
                     players.append({
                         "account_id": pid,
-                        "agent_name": agent_name,
+                        "name": display_name,
+                        "agent_name": "",
                         "win_loss": wl if wl is not None else 0,
                         "balance": balance,
                         "action": action,
-                        "raw_data": {"agent": agent_name, "source": "balance"},
+                        "raw_data": {"source": "balance"},
                     })
                     player_map[pid] = players[-1]
 
@@ -304,7 +391,7 @@ def scrape_wagers(page, site_url: str) -> list:
         navigated = False
         for url in wager_urls:
             try:
-                page.goto(url, wait_until="networkidle", timeout=15000)
+                page.goto(url, wait_until="load", timeout=15000)
                 page.wait_for_timeout(2000)
                 if "login" not in page.url.lower():
                     navigated = True
