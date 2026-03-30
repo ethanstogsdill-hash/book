@@ -57,10 +57,7 @@ def normalize_result(text: str) -> str:
 def kill_chrome():
     """Kill Chrome processes on Windows."""
     try:
-        subprocess.run(
-            ["taskkill", "/F", "/IM", "chrome.exe", "/T"],
-            capture_output=True, timeout=10
-        )
+        os.system('taskkill /F /IM chrome.exe /T >nul 2>&1')
     except Exception:
         pass
 
@@ -77,13 +74,24 @@ def main():
 
     # Launch Chrome with CDP
     profile_abs = os.path.abspath(profile_dir)
-    cmd = (
-        f'start "" "{CHROME_PATH}" '
-        f'--remote-debugging-port={CDP_PORT} '
-        f'--user-data-dir="{profile_abs}" '
-        f'--no-first-run --no-default-browser-check "{site_url}"'
+    chrome_args = [
+        CHROME_PATH,
+        f"--remote-debugging-port={CDP_PORT}",
+        f"--user-data-dir={profile_abs}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        site_url,
+    ]
+    # Launch Chrome fully detached so it doesn't block the parent process pipes
+    CREATE_NEW_PROCESS_GROUP = 0x00000200
+    DETACHED_PROCESS = 0x00000008
+    chrome_proc = subprocess.Popen(
+        chrome_args,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        creationflags=CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS,
     )
-    os.system(cmd)
 
     # Wait for Chrome CDP to be ready
     import urllib.request
