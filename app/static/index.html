@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — Sportsbook Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #0f172a; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center">
+    <div class="bg-slate-800 rounded-xl shadow-2xl p-8 w-full max-w-sm">
+        <h1 class="text-2xl font-bold text-white text-center mb-6">Sportsbook Manager</h1>
+        <div id="error" class="hidden bg-red-500/20 text-red-300 text-sm rounded p-3 mb-4"></div>
+        <form id="loginForm" class="space-y-4">
+            <div>
+                <label class="block text-slate-400 text-sm mb-1">Username</label>
+                <input type="text" id="username" autocomplete="username"
+                    class="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5 border border-slate-600 focus:border-blue-500 focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-slate-400 text-sm mb-1">Password</label>
+                <input type="password" id="password" autocomplete="current-password"
+                    class="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5 border border-slate-600 focus:border-blue-500 focus:outline-none">
+            </div>
+            <button type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg py-2.5 transition">
+                Sign In
+            </button>
+        </form>
+    </div>
+
+    <script>
+        // If already logged in, redirect
+        fetch('/api/auth/me').then(r => { if (r.ok) window.location.href = '/dashboard'; });
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const errEl = document.getElementById('error');
+            errEl.classList.add('hidden');
+
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: document.getElementById('username').value,
+                    password: document.getElementById('password').value,
+                }),
+            });
+
+            if (res.ok) {
+                window.location.href = '/dashboard';
+            } else {
+                const data = await res.json();
+                errEl.textContent = data.detail || 'Login failed';
+                errEl.classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

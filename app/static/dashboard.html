@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — Sportsbook Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="bg-slate-900 text-white min-h-screen">
+    <!-- Header -->
+    <header class="bg-slate-800 border-b border-slate-700 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
+        <h1 class="text-lg font-bold text-blue-400">Sportsbook Manager</h1>
+        <div class="flex items-center gap-3">
+            <button onclick="triggerScrape()" id="syncBtn"
+                class="bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                <span id="syncIcon">&#x21bb;</span> Sync Now
+            </button>
+            <span id="lastSync" class="text-slate-400 text-xs hidden sm:inline"></span>
+            <button onclick="showActivityPanel()" class="text-slate-400 hover:text-white text-xl" title="Activity Log">&#x1f514;</button>
+            <button onclick="logout()" class="text-slate-400 hover:text-red-400 text-sm">Logout</button>
+        </div>
+    </header>
+
+    <!-- Tabs -->
+    <nav class="bg-slate-800 border-b border-slate-700 overflow-x-auto">
+        <div class="flex">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="players">Players</button>
+            <button class="tab-btn" data-tab="subagents">Sub-Agents</button>
+            <button class="tab-btn" data-tab="weekly">Weekly</button>
+            <button class="tab-btn" data-tab="bets">Bets</button>
+            <button class="tab-btn" data-tab="settlements">Settlements</button>
+            <button class="tab-btn" data-tab="settings">Settings</button>
+        </div>
+    </nav>
+
+    <!-- Tab Content -->
+    <main class="p-4 max-w-7xl mx-auto">
+        <div id="tab-overview" class="tab-content"></div>
+        <div id="tab-players" class="tab-content hidden"></div>
+        <div id="tab-subagents" class="tab-content hidden"></div>
+        <div id="tab-weekly" class="tab-content hidden"></div>
+        <div id="tab-bets" class="tab-content hidden"></div>
+        <div id="tab-settlements" class="tab-content hidden"></div>
+        <div id="tab-settings" class="tab-content hidden"></div>
+    </main>
+
+    <!-- Activity Panel (slide-out) -->
+    <div id="activityPanel" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50" onclick="hideActivityPanel()"></div>
+        <div class="absolute right-0 top-0 h-full w-full max-w-md bg-slate-800 border-l border-slate-700 overflow-y-auto p-4">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold">Activity Log</h2>
+                <button onclick="hideActivityPanel()" class="text-slate-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div id="activityContent"></div>
+        </div>
+    </div>
+
+    <!-- Player Detail Modal -->
+    <div id="playerModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50" onclick="closePlayerModal()"></div>
+        <div class="absolute inset-4 sm:inset-10 bg-slate-800 rounded-xl border border-slate-700 overflow-y-auto p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 id="modalTitle" class="text-lg font-bold">Player Details</h2>
+                <button onclick="closePlayerModal()" class="text-slate-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <!-- Sub-Agent Detail Modal -->
+    <div id="subAgentModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50" onclick="closeSubAgentModal()"></div>
+        <div class="absolute inset-4 sm:inset-10 bg-slate-800 rounded-xl border border-slate-700 overflow-y-auto p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 id="subModalTitle" class="text-lg font-bold">Sub-Agent Details</h2>
+                <button onclick="closeSubAgentModal()" class="text-slate-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div id="subModalContent"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/players.js"></script>
+    <script src="/static/js/sub_agents.js"></script>
+    <script src="/static/js/weeks.js"></script>
+    <script src="/static/js/bets.js"></script>
+    <script src="/static/js/settlements.js"></script>
+    <script src="/static/js/settings.js"></script>
+    <script src="/static/js/activity.js"></script>
+</body>
+</html>

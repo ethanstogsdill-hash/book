@@ -1,0 +1,48 @@
+# Environment
+.env
+*.env.local
+
+# Database
+*.db
+*.sqlite
+*.db-shm
+*.db-wal
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Chrome profile (scraper)
+data/chrome_profile/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (if any)
+node_modules/
+
+# Credentials
+credentials/
+*.json
+!package.json
+
+# PDF output
+*.pdf
+
+# Logs
+*.log
