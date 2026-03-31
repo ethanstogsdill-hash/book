@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS sub_agents (
     username TEXT UNIQUE,
     phone TEXT DEFAULT '',
     telegram_chat_id TEXT DEFAULT '',
+    telegram_username TEXT DEFAULT '',
+    venmo TEXT DEFAULT '',
     credit_limit REAL DEFAULT 0,
     balance REAL DEFAULT 0,
     status TEXT DEFAULT 'active',
@@ -176,6 +178,14 @@ async def init_db():
     try:
         await db.executescript(SCHEMA)
 
+        # Migrate: add new columns if missing
+        for col, default in [("telegram_username", "''"), ("venmo", "''")]:
+            try:
+                await db.execute(f"ALTER TABLE sub_agents ADD COLUMN {col} TEXT DEFAULT {default}")
+                print(f"[INIT] Added column sub_agents.{col}")
+            except Exception:
+                pass  # Column already exists
+
         # Seed default user if none exists
         cur = await db.execute("SELECT COUNT(*) FROM users")
         count = (await cur.fetchone())[0]
@@ -257,13 +267,15 @@ async def get_sub_agent_by_username(db, username: str):
 
 async def create_sub_agent(db, data: dict) -> int:
     cur = await db.execute(
-        "INSERT INTO sub_agents (name, username, phone, telegram_chat_id, credit_limit, status, vig_split, notes) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO sub_agents (name, username, phone, telegram_chat_id, telegram_username, venmo, credit_limit, status, vig_split, notes) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             data.get("name", ""),
             data.get("username"),
             data.get("phone", ""),
             data.get("telegram_chat_id", ""),
+            data.get("telegram_username", ""),
+            data.get("venmo", ""),
             data.get("credit_limit", 0),
             data.get("status", "active"),
             data.get("vig_split", 0),
@@ -277,8 +289,8 @@ async def create_sub_agent(db, data: dict) -> int:
 async def update_sub_agent(db, sub_id: int, data: dict):
     fields = []
     values = []
-    allowed = ["name", "username", "phone", "telegram_chat_id", "credit_limit",
-               "balance", "status", "vig_split", "notes"]
+    allowed = ["name", "username", "phone", "telegram_chat_id", "telegram_username",
+               "venmo", "credit_limit", "balance", "status", "vig_split", "notes"]
     for key in allowed:
         if key in data:
             fields.append(f"{key} = ?")

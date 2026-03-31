@@ -32,6 +32,8 @@ class SubAgentUpdate(BaseModel):
     username: Optional[str] = None
     phone: Optional[str] = None
     telegram_chat_id: Optional[str] = None
+    telegram_username: Optional[str] = None
+    venmo: Optional[str] = None
     credit_limit: Optional[float] = None
     status: Optional[str] = None
     vig_split: Optional[float] = None
@@ -43,6 +45,8 @@ class SubAgentCreate(BaseModel):
     username: Optional[str] = None
     phone: Optional[str] = ""
     telegram_chat_id: Optional[str] = ""
+    telegram_username: Optional[str] = ""
+    venmo: Optional[str] = ""
     credit_limit: Optional[float] = 0
     vig_split: Optional[float] = 0
     notes: Optional[str] = ""

@@ -68,8 +68,16 @@ async function openSubAgentDetail(id) {
                 <input class="input mt-1" id="subEditPhone" value="${esc(s.phone)}">
             </div>
             <div>
+                <label class="text-slate-400 text-xs">Telegram Username</label>
+                <input class="input mt-1" id="subEditTelegramUser" value="${esc(s.telegram_username || '')}" placeholder="@username">
+            </div>
+            <div>
                 <label class="text-slate-400 text-xs">Telegram Chat ID</label>
                 <input class="input mt-1" id="subEditTelegram" value="${esc(s.telegram_chat_id)}">
+            </div>
+            <div>
+                <label class="text-slate-400 text-xs">Venmo</label>
+                <input class="input mt-1" id="subEditVenmo" value="${esc(s.venmo || '')}" placeholder="@venmo-handle">
             </div>
             <div>
                 <label class="text-slate-400 text-xs">Credit Limit</label>
@@ -137,7 +145,9 @@ async function saveSubAgent(id) {
         name: document.getElementById('subEditName').value,
         username: document.getElementById('subEditUsername').value,
         phone: document.getElementById('subEditPhone').value,
+        telegram_username: document.getElementById('subEditTelegramUser').value,
         telegram_chat_id: document.getElementById('subEditTelegram').value,
+        venmo: document.getElementById('subEditVenmo').value,
         credit_limit: parseFloat(document.getElementById('subEditCreditLimit').value) || 0,
         vig_split: parseFloat(document.getElementById('subEditVigSplit').value) || 0,
         status: document.getElementById('subEditStatus').value,
