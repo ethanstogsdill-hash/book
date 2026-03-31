@@ -14,6 +14,7 @@ async def start_scheduler():
     _running = True
 
     _tasks.append(asyncio.create_task(_scrape_loop()))
+    _tasks.append(asyncio.create_task(_live_bets_loop()))
     _tasks.append(asyncio.create_task(_payday_loop()))
     _tasks.append(asyncio.create_task(_telegram_poll_loop()))
 
@@ -31,7 +32,7 @@ async def stop_scheduler():
 
 async def _scrape_loop():
     """Periodically run the scraper."""
-    await asyncio.sleep(60)  # Wait 1 minute before first scrape
+    await asyncio.sleep(300)  # Wait 5 minutes before first auto-scrape
 
     while _running:
         try:
@@ -64,6 +65,27 @@ async def _scrape_loop():
         except Exception as e:
             print(f"[SCHEDULER] Scrape loop error: {e}")
             await asyncio.sleep(300)  # Wait 5 min on error
+
+
+async def _live_bets_loop():
+    """Auto-refresh live bets every 5 minutes."""
+    await asyncio.sleep(120)  # Wait 2 minutes before first refresh
+
+    while _running:
+        try:
+            from app.services.live_bets_scraper import run_live_bets_scrape, live_bets_status
+            if not live_bets_status["running"]:
+                print("[SCHEDULER] Auto-refreshing live bets", flush=True)
+                result = await run_live_bets_scrape()
+                print(f"[SCHEDULER] Live bets result: {result}", flush=True)
+
+            await asyncio.sleep(300)  # 5 minutes
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[SCHEDULER] Live bets loop error: {e}")
+            await asyncio.sleep(300)
 
 
 async def _payday_loop():

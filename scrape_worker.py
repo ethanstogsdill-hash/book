@@ -69,6 +69,7 @@ def main():
     profile_dir = sys.argv[4] if len(sys.argv) > 4 else os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "data", "chrome_profile"
     )
+    mode = sys.argv[5] if len(sys.argv) > 5 else "full"  # "full" or "livebets"
 
     os.makedirs(profile_dir, exist_ok=True)
 
@@ -172,14 +173,18 @@ def main():
             actual_base = f"{parsed.scheme}://{parsed.netloc}"
             print(f"DEBUG: Post-login URL: {page.url}, using base: {actual_base}", file=sys.stderr)
 
-            # ─── Scrape Dashboard ───────────────────────────────────
-            result["players"] = scrape_dashboard(page, actual_base)
+            if mode == "livebets":
+                # ─── Scrape Live Bets Only ─────────────────────────────
+                result["live_bets"] = scrape_live_bets(page, actual_base)
+            else:
+                # ─── Scrape Dashboard ──────────────────────────────────
+                result["players"] = scrape_dashboard(page, actual_base)
 
-            # ─── Scrape Weekly Balance ──────────────────────────────
-            enrich_with_balance(page, actual_base, result["players"])
+                # ─── Scrape Weekly Balance ─────────────────────────────
+                enrich_with_balance(page, actual_base, result["players"])
 
-            # ─── Scrape Wagers ──────────────────────────────────────
-            result["wagers"] = scrape_wagers(page, actual_base)
+                # ─── Scrape Wagers ─────────────────────────────────────
+                result["wagers"] = scrape_wagers(page, actual_base)
 
             browser.close()
 
@@ -478,6 +483,130 @@ def scrape_wagers(page, site_url: str) -> list:
 
     print(f"DEBUG: Scraped {len(wagers)} wagers", file=sys.stderr)
     return wagers
+
+
+def scrape_live_bets(page, site_url: str) -> list:
+    """Scrape the Wagers Ticker (Live) page for open/active bets.
+
+    Page structure (allagentreports.com):
+    - Table 0: Color legend (1 row, skip)
+    - Table 1: Headers row with TH cells: Date, Agent|Player/Password, Ticket, Source, Type, Description, Risk, Win
+    - Table 2: Data rows with TD cells, but has 2 extra columns at start (checkbox, Delete button)
+      So data columns are offset by +2: col2=Date, col3=Agent|Player, col4=Ticket, col5=Source, col6=Type, col7=Description, col8=Risk, col9=Win
+    """
+    live_bets = []
+    try:
+        live_url = site_url.rstrip("/") + "/Forms/BettorWagersLive.aspx"
+        print(f"DEBUG: Navigating to live bets: {live_url}", file=sys.stderr)
+        page.goto(live_url, wait_until="load", timeout=30000)
+        page.wait_for_timeout(5000)
+        print(f"DEBUG: Live bets page: {page.url}, title: {page.title()}", file=sys.stderr)
+
+        if "login" in page.url.lower():
+            print("DEBUG: Redirected to login, live bets page not accessible", file=sys.stderr)
+            return live_bets
+
+        # Find the data table (the one with the most rows)
+        all_tables = page.locator("table").all()
+        data_table = None
+        max_rows = 0
+        for t in all_tables:
+            rc = t.locator("tr").count()
+            if rc > max_rows:
+                max_rows = rc
+                data_table = t
+
+        if not data_table or max_rows < 1:
+            print("DEBUG: No data table found on live bets page", file=sys.stderr)
+            return live_bets
+
+        print(f"DEBUG: Using data table with {max_rows} rows", file=sys.stderr)
+
+        rows = data_table.locator("tr").all()
+        seen_ids = set()
+
+        for row in rows:
+            cells = row.locator("td").all()
+            # Data rows have 10 columns: checkbox, Delete, Date, Agent|Player, Ticket, Source, Type, Description, Risk, Win
+            if len(cells) < 8:
+                continue
+
+            # Columns with +2 offset for the checkbox and Delete columns
+            date_text = cells[2].inner_text().strip() if len(cells) > 2 else ""
+            agent_player_text = cells[3].inner_text().strip() if len(cells) > 3 else ""
+            ticket_id = cells[4].inner_text().strip() if len(cells) > 4 else ""
+            # source = cells[5]  # "Internet" etc
+            bet_type = cells[6].inner_text().strip() if len(cells) > 6 else ""
+            description = cells[7].inner_text().strip() if len(cells) > 7 else ""
+            risk_text = cells[8].inner_text().strip() if len(cells) > 8 else "0"
+            win_text = cells[9].inner_text().strip() if len(cells) > 9 else "0"
+
+            if not ticket_id or not agent_player_text or "delete" in ticket_id.lower():
+                continue
+            if ticket_id in seen_ids:
+                continue
+            seen_ids.add(ticket_id)
+
+            # Parse "AGENT_NAME\nPLAYER_ACCOUNT / DISPLAY_NAME" or "AGENT_NAME | PLAYER_ACCOUNT / DISPLAY_NAME"
+            sub_agent_name = ""
+            player_account = ""
+            player_name = ""
+            # The cell contains agent on first line, player on second line (separated by \n)
+            ap = agent_player_text.replace("|", "\n")
+            lines = [l.strip() for l in ap.split("\n") if l.strip()]
+            if len(lines) >= 2:
+                sub_agent_name = lines[0]
+                player_part = lines[1]
+                if "/" in player_part:
+                    player_account = player_part.split("/")[0].strip()
+                    player_name = player_part.split("/")[1].strip()
+                else:
+                    player_account = player_part
+                    player_name = player_part
+            elif len(lines) == 1:
+                player_account = lines[0]
+
+            amount = parse_number(risk_text)
+            payout = parse_number(win_text)
+
+            # Extract odds from description if present (e.g., "-150", "+135")
+            odds = ""
+            odds_match = re.search(r'[+-]\d{3,}', description)
+            if odds_match:
+                odds = odds_match.group()
+
+            # Extract sport from description (e.g., "[MLB]", "[NBA]")
+            sport = ""
+            sport_match = re.search(r'\[(\w+)\]', description)
+            if sport_match:
+                sport = sport_match.group(1)
+
+            # Clean up description — collapse newlines
+            description = description.replace("\n", " | ").strip()
+
+            bet = {
+                "bet_id": ticket_id,
+                "player_name": player_name,
+                "player_account": player_account,
+                "sub_agent_name": sub_agent_name,
+                "description": description,
+                "amount": amount,
+                "odds": odds,
+                "potential_payout": payout if payout else amount,
+                "time_placed": date_text,
+                "status": "open",
+                "sport": sport,
+                "bet_type": bet_type,
+                "raw_data": {},
+            }
+            live_bets.append(bet)
+            print(f"DEBUG: Live bet: {player_account} {description[:40]} risk=${amount} win=${payout}", file=sys.stderr)
+
+    except Exception as e:
+        print(f"DEBUG: Live bets scrape error: {e}", file=sys.stderr)
+
+    print(f"DEBUG: Scraped {len(live_bets)} live bets", file=sys.stderr)
+    return live_bets
 
 
 if __name__ == "__main__":

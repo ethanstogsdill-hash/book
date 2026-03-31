@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from app.database import init_db
-from app.routers import auth, dashboard, players, sub_agents, bets, weeks, settlements, scrape, settings_router, activity
+from app.routers import auth, dashboard, players, sub_agents, bets, weeks, settlements, scrape, settings_router, activity, live_bets
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -48,6 +48,7 @@ app.include_router(settlements.router)
 app.include_router(scrape.router)
 app.include_router(settings_router.router)
 app.include_router(activity.router)
+app.include_router(live_bets.router)
 
 
 @app.get("/api/telegram/test")

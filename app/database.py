@@ -104,6 +104,24 @@ CREATE TABLE IF NOT EXISTS settlements (
     settled_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS live_bets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bet_id TEXT UNIQUE,
+    player_name TEXT DEFAULT '',
+    player_account TEXT DEFAULT '',
+    sub_agent_name TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    amount REAL DEFAULT 0,
+    odds TEXT DEFAULT '',
+    potential_payout REAL DEFAULT 0,
+    time_placed TEXT DEFAULT '',
+    status TEXT DEFAULT 'open',
+    sport TEXT DEFAULT '',
+    bet_type TEXT DEFAULT '',
+    raw_data TEXT DEFAULT '{}',
+    scraped_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS alerts_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT DEFAULT (datetime('now')),
@@ -736,3 +754,72 @@ async def update_user_password(db, user_id: int, password_hash: str):
         (password_hash, user_id),
     )
     await db.commit()
+
+
+# ─── Live Bets ──────────────────────────────────────────────
+
+async def upsert_live_bets(db, bets: list):
+    """Replace all live bets with fresh scraped data."""
+    await db.execute("DELETE FROM live_bets")
+    count = 0
+    now = datetime.utcnow().isoformat()
+    for b in bets:
+        bet_id = b.get("bet_id", "")
+        if not bet_id:
+            continue
+        await db.execute(
+            "INSERT OR REPLACE INTO live_bets "
+            "(bet_id, player_name, player_account, sub_agent_name, description, "
+            "amount, odds, potential_payout, time_placed, status, sport, bet_type, raw_data, scraped_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                bet_id,
+                b.get("player_name", ""),
+                b.get("player_account", ""),
+                b.get("sub_agent_name", ""),
+                b.get("description", ""),
+                b.get("amount", 0),
+                b.get("odds", ""),
+                b.get("potential_payout", 0),
+                b.get("time_placed", ""),
+                b.get("status", "open"),
+                b.get("sport", ""),
+                b.get("bet_type", ""),
+                json.dumps(b.get("raw_data", {})),
+                now,
+            ),
+        )
+        count += 1
+    await db.commit()
+    return count
+
+
+async def get_live_bets(db, sort_by: str = "sub_agent_name", sort_dir: str = "asc"):
+    allowed_sorts = ["sub_agent_name", "amount", "time_placed", "player_name", "potential_payout"]
+    if sort_by not in allowed_sorts:
+        sort_by = "sub_agent_name"
+    direction = "DESC" if sort_dir.lower() == "desc" else "ASC"
+    cur = await db.execute(
+        f"SELECT * FROM live_bets ORDER BY {sort_by} {direction}, amount DESC"
+    )
+    return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_live_bets_summary(db):
+    cur = await db.execute(
+        "SELECT COUNT(*) as total_bets, "
+        "COALESCE(SUM(amount), 0) as total_wagered, "
+        "COALESCE(SUM(potential_payout), 0) as total_payout "
+        "FROM live_bets WHERE status = 'open'"
+    )
+    row = await cur.fetchone()
+    summary = dict(row)
+
+    # Last refresh time
+    cur2 = await db.execute(
+        "SELECT scraped_at FROM live_bets ORDER BY scraped_at DESC LIMIT 1"
+    )
+    last = await cur2.fetchone()
+    summary["last_refreshed"] = last["scraped_at"] if last else None
+
+    return summary
