@@ -14,7 +14,8 @@ async def start_scheduler():
     _running = True
 
     _tasks.append(asyncio.create_task(_scrape_loop()))
-    _tasks.append(asyncio.create_task(_live_bets_loop()))
+    # Live bets auto-refresh disabled — use manual Refresh button instead
+    # _tasks.append(asyncio.create_task(_live_bets_loop()))
     _tasks.append(asyncio.create_task(_payday_loop()))
     _tasks.append(asyncio.create_task(_telegram_poll_loop()))
 
