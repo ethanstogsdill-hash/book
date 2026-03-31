@@ -61,7 +61,7 @@ async function loadLiveBets() {
         </div>
     `;
 
-    if (summaryData.running) {
+    if (summaryData.running && !liveBetsRefreshing) {
         liveBetsRefreshing = true;
         document.getElementById('liveBetsRefreshBtn').disabled = true;
         document.getElementById('liveBetsRefreshIcon').classList.add('spinning');
@@ -134,11 +134,13 @@ function renderBetsTable(bets) {
                 <tbody>
                     ${bets.map(b => {
                         const sizeClass = betSizeClass(b.amount, b.credit_limit);
+                        const descSafe = esc(b.description || '').replace(/"/g, '&quot;');
+                        const shortDesc = (b.description || '').length > 60 ? (b.description || '').substring(0, 60) + '...' : (b.description || '');
                         return `
                         <tr>
                             <td class="font-medium">${esc(b.player_name || b.player_account)}</td>
-                            <td class="text-slate-300" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(b.description)}">
-                                ${b.sport ? '<span class="text-xs text-slate-500 mr-1">' + esc(b.sport) + '</span>' : ''}${esc(b.description)}
+                            <td class="text-slate-300" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${descSafe}">
+                                ${b.sport ? '<span class="text-xs text-slate-500 mr-1">' + esc(b.sport) + '</span>' : ''}${esc(shortDesc)}
                             </td>
                             <td class="${sizeClass} font-semibold">${fmt(b.amount)}</td>
                             <td class="hide-mobile text-slate-400">${esc(b.odds)}</td>
